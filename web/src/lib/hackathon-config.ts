@@ -6,11 +6,14 @@ export type HackathonConfig = {
   mode: HackathonMode;
   problemSelectionStartAt: Date;
   hackathonEndAt: Date;
+  testingHomepageCountdownTargetAt: Date;
+  homepageCountdownTargetAt: Date;
   updatedAt: Date;
 };
 
 const DEFAULT_PROBLEM_SELECTION_START_ISO = "2026-03-09T04:00:00.000Z"; // 09:30 IST
 const DEFAULT_HACKATHON_END_ISO = "2026-03-09T14:00:00.000Z"; // 19:30 IST
+const LIVE_HOMEPAGE_COUNTDOWN_TARGET_ISO = "2026-03-09T03:30:00.000Z"; // 09:00 IST fixed for LIVE
 
 let isInitialized = false;
 
@@ -23,18 +26,25 @@ async function ensureHackathonConfigTable() {
       "mode" TEXT NOT NULL DEFAULT 'LIVE',
       "problemSelectionStartAt" TIMESTAMPTZ NOT NULL,
       "hackathonEndAt" TIMESTAMPTZ NOT NULL,
+      "testingHomepageCountdownTargetAt" TIMESTAMPTZ NOT NULL DEFAULT '${LIVE_HOMEPAGE_COUNTDOWN_TARGET_ISO}',
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "HackathonConfig"
+    ADD COLUMN IF NOT EXISTS "testingHomepageCountdownTargetAt" TIMESTAMPTZ NOT NULL DEFAULT '${LIVE_HOMEPAGE_COUNTDOWN_TARGET_ISO}';
+  `);
+
   await prisma.$executeRawUnsafe(
     `
-      INSERT INTO "HackathonConfig" ("id", "mode", "problemSelectionStartAt", "hackathonEndAt", "updatedAt")
-      VALUES (1, 'LIVE', $1::timestamptz, $2::timestamptz, NOW())
+      INSERT INTO "HackathonConfig" ("id", "mode", "problemSelectionStartAt", "hackathonEndAt", "testingHomepageCountdownTargetAt", "updatedAt")
+      VALUES (1, 'LIVE', $1::timestamptz, $2::timestamptz, $3::timestamptz, NOW())
       ON CONFLICT ("id") DO NOTHING;
     `,
     DEFAULT_PROBLEM_SELECTION_START_ISO,
-    DEFAULT_HACKATHON_END_ISO
+    DEFAULT_HACKATHON_END_ISO,
+    LIVE_HOMEPAGE_COUNTDOWN_TARGET_ISO
   );
 
   isInitialized = true;
@@ -53,11 +63,12 @@ export async function getHackathonConfig(): Promise<HackathonConfig> {
       mode: string;
       problemSelectionStartAt: Date | string;
       hackathonEndAt: Date | string;
+      testingHomepageCountdownTargetAt: Date | string;
       updatedAt: Date | string;
     }>
   >(
     `
-      SELECT "mode", "problemSelectionStartAt", "hackathonEndAt", "updatedAt"
+      SELECT "mode", "problemSelectionStartAt", "hackathonEndAt", "testingHomepageCountdownTargetAt", "updatedAt"
       FROM "HackathonConfig"
       WHERE "id" = 1
       LIMIT 1;
@@ -67,10 +78,19 @@ export async function getHackathonConfig(): Promise<HackathonConfig> {
   const row = rows[0];
   const mode = row?.mode === "TESTING" ? "TESTING" : "LIVE";
 
+  const testingHomepageCountdownTargetAt = toDate(
+    row?.testingHomepageCountdownTargetAt ?? LIVE_HOMEPAGE_COUNTDOWN_TARGET_ISO
+  );
+  const homepageCountdownTargetAt = mode === "LIVE"
+    ? toDate(LIVE_HOMEPAGE_COUNTDOWN_TARGET_ISO)
+    : testingHomepageCountdownTargetAt;
+
   return {
     mode,
     problemSelectionStartAt: toDate(row?.problemSelectionStartAt ?? DEFAULT_PROBLEM_SELECTION_START_ISO),
     hackathonEndAt: toDate(row?.hackathonEndAt ?? DEFAULT_HACKATHON_END_ISO),
+    testingHomepageCountdownTargetAt,
+    homepageCountdownTargetAt,
     updatedAt: toDate(row?.updatedAt ?? new Date()),
   };
 }
@@ -79,14 +99,27 @@ export async function updateHackathonConfig(input: {
   mode?: string;
   problemSelectionStartAt?: string | Date;
   hackathonEndAt?: string | Date;
+  testingHomepageCountdownTargetAt?: string | Date;
 }) {
   const existing = await getHackathonConfig();
 
   const mode: HackathonMode = input.mode === "TESTING" ? "TESTING" : input.mode === "LIVE" ? "LIVE" : existing.mode;
-  const selectionStart = input.problemSelectionStartAt ? toDate(input.problemSelectionStartAt) : existing.problemSelectionStartAt;
-  const hackathonEnd = input.hackathonEndAt ? toDate(input.hackathonEndAt) : existing.hackathonEndAt;
+  // Problem/hackathon timers are editable only in TESTING mode.
+  const selectionStart = mode === "TESTING" && input.problemSelectionStartAt
+    ? toDate(input.problemSelectionStartAt)
+    : existing.problemSelectionStartAt;
+  const hackathonEnd = mode === "TESTING" && input.hackathonEndAt
+    ? toDate(input.hackathonEndAt)
+    : existing.hackathonEndAt;
+  const testingHomepageCountdownTargetAt = input.testingHomepageCountdownTargetAt
+    ? toDate(input.testingHomepageCountdownTargetAt)
+    : existing.testingHomepageCountdownTargetAt;
 
-  if (Number.isNaN(selectionStart.getTime()) || Number.isNaN(hackathonEnd.getTime())) {
+  if (
+    Number.isNaN(selectionStart.getTime())
+    || Number.isNaN(hackathonEnd.getTime())
+    || Number.isNaN(testingHomepageCountdownTargetAt.getTime())
+  ) {
     throw new Error("INVALID_DATE");
   }
   if (hackathonEnd.getTime() <= selectionStart.getTime()) {
@@ -100,14 +133,15 @@ export async function updateHackathonConfig(input: {
         "mode" = $1,
         "problemSelectionStartAt" = $2::timestamptz,
         "hackathonEndAt" = $3::timestamptz,
+        "testingHomepageCountdownTargetAt" = $4::timestamptz,
         "updatedAt" = NOW()
       WHERE "id" = 1;
     `,
     mode,
     selectionStart.toISOString(),
-    hackathonEnd.toISOString()
+    hackathonEnd.toISOString(),
+    testingHomepageCountdownTargetAt.toISOString()
   );
 
   return getHackathonConfig();
 }
-

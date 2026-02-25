@@ -20,6 +20,35 @@ type Team = {
     avgScore: number | null;
 };
 
+const IST_OFFSET_MINUTES = 5 * 60 + 30;
+
+function isoToIstInputValue(iso: string) {
+    if (!iso) return "";
+    const normalizedIso = /[zZ]|[+\-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`;
+    const utcMs = new Date(normalizedIso).getTime();
+    if (Number.isNaN(utcMs)) return "";
+    const istMs = utcMs + IST_OFFSET_MINUTES * 60 * 1000;
+    const d = new Date(istMs);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const y = d.getUTCFullYear();
+    const m = pad(d.getUTCMonth() + 1);
+    const day = pad(d.getUTCDate());
+    const h = pad(d.getUTCHours());
+    const min = pad(d.getUTCMinutes());
+    return `${y}-${m}-${day}T${h}:${min}`;
+}
+
+function istInputToIso(value: string) {
+    if (!value) return null;
+    const [datePart, timePart] = value.split("T");
+    if (!datePart || !timePart) return null;
+    const [y, m, d] = datePart.split("-").map(Number);
+    const [hh, mm] = timePart.split(":").map(Number);
+    if ([y, m, d, hh, mm].some((x) => Number.isNaN(x))) return null;
+    const utcMs = Date.UTC(y, m - 1, d, hh, mm) - IST_OFFSET_MINUTES * 60 * 1000;
+    return new Date(utcMs).toISOString();
+}
+
 export default function AdminDashboardPage() {
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(true);
@@ -32,17 +61,7 @@ export default function AdminDashboardPage() {
     const [eventMode, setEventMode] = useState<"TESTING" | "LIVE">("LIVE");
     const [selectionStartInput, setSelectionStartInput] = useState("");
     const [hackathonEndInput, setHackathonEndInput] = useState("");
-
-    const toInputValue = (iso: string) => {
-        const d = new Date(iso);
-        const pad = (n: number) => String(n).padStart(2, "0");
-        const y = d.getFullYear();
-        const m = pad(d.getMonth() + 1);
-        const day = pad(d.getDate());
-        const h = pad(d.getHours());
-        const min = pad(d.getMinutes());
-        return `${y}-${m}-${day}T${h}:${min}`;
-    };
+    const [testingHomepageCountdownInput, setTestingHomepageCountdownInput] = useState("");
 
     const fetchEventConfig = async () => {
         setConfigLoading(true);
@@ -55,8 +74,9 @@ export default function AdminDashboardPage() {
                 return;
             }
             setEventMode(data.mode === "TESTING" ? "TESTING" : "LIVE");
-            setSelectionStartInput(toInputValue(data.problemSelectionStartAt));
-            setHackathonEndInput(toInputValue(data.hackathonEndAt));
+            setSelectionStartInput(isoToIstInputValue(data.problemSelectionStartAt));
+            setHackathonEndInput(isoToIstInputValue(data.hackathonEndAt));
+            setTestingHomepageCountdownInput(isoToIstInputValue(data.testingHomepageCountdownTargetAt ?? data.homepageCountdownTargetAt));
         } catch {
             setConfigError("Failed to load event config");
         } finally {
@@ -109,8 +129,9 @@ export default function AdminDashboardPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     mode: eventMode,
-                    problemSelectionStartAt: selectionStartInput ? new Date(selectionStartInput).toISOString() : null,
-                    hackathonEndAt: hackathonEndInput ? new Date(hackathonEndInput).toISOString() : null,
+                    problemSelectionStartAt: istInputToIso(selectionStartInput),
+                    hackathonEndAt: istInputToIso(hackathonEndInput),
+                    testingHomepageCountdownTargetAt: istInputToIso(testingHomepageCountdownInput),
                 }),
             });
             const data = await res.json().catch(() => ({}));
@@ -120,8 +141,9 @@ export default function AdminDashboardPage() {
             }
             setConfigSuccess("Event mode and timers updated successfully.");
             setEventMode(data.mode === "TESTING" ? "TESTING" : "LIVE");
-            setSelectionStartInput(toInputValue(data.problemSelectionStartAt));
-            setHackathonEndInput(toInputValue(data.hackathonEndAt));
+            setSelectionStartInput(isoToIstInputValue(data.problemSelectionStartAt));
+            setHackathonEndInput(isoToIstInputValue(data.hackathonEndAt));
+            setTestingHomepageCountdownInput(isoToIstInputValue(data.testingHomepageCountdownTargetAt ?? data.homepageCountdownTargetAt));
         } catch {
             setConfigError("Failed to save event config");
         } finally {
@@ -268,26 +290,47 @@ export default function AdminDashboardPage() {
                                         {configLoading ? "Loading..." : "Reload Config"}
                                     </Button>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="space-y-1">
-                                        <Label className="text-xs">Problem Selection Start</Label>
+                                        <Label className="text-xs">Problem Selection Start (IST)</Label>
                                         <Input
                                             type="datetime-local"
                                             value={selectionStartInput}
                                             onChange={(e) => setSelectionStartInput(e.target.value)}
-                                            disabled={configLoading || configSaving}
+                                            disabled={configLoading || configSaving || eventMode !== "TESTING"}
                                         />
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Editable only in TESTING mode. Example: 09:30 means 9:30 AM IST.
+                                        </p>
                                     </div>
                                     <div className="space-y-1">
-                                        <Label className="text-xs">Hackathon End Time</Label>
+                                        <Label className="text-xs">Hackathon End Time (IST)</Label>
                                         <Input
                                             type="datetime-local"
                                             value={hackathonEndInput}
                                             onChange={(e) => setHackathonEndInput(e.target.value)}
-                                            disabled={configLoading || configSaving}
+                                            disabled={configLoading || configSaving || eventMode !== "TESTING"}
                                         />
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Editable only in TESTING mode. Example: 19:30 means 7:30 PM IST.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Homepage Countdown (Testing Mode, IST)</Label>
+                                        <Input
+                                            type="datetime-local"
+                                            value={testingHomepageCountdownInput}
+                                            onChange={(e) => setTestingHomepageCountdownInput(e.target.value)}
+                                            disabled={configLoading || configSaving || eventMode !== "TESTING"}
+                                        />
+                                        <p className="text-[10px] text-muted-foreground">
+                                            In LIVE mode, homepage countdown stays fixed at March 9, 2026 09:00 AM IST.
+                                        </p>
                                     </div>
                                 </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                    All timer inputs in this section are interpreted as IST (UTC+05:30).
+                                </p>
                                 <Button onClick={saveEventConfig} disabled={configLoading || configSaving} className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold">
                                     {configSaving ? "Saving..." : "Save Event Settings"}
                                 </Button>

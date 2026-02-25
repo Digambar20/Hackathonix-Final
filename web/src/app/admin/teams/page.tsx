@@ -51,8 +51,6 @@ export default function AdminTeamsPage() {
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [createError, setCreateError] = useState("");
     const [createSuccess, setCreateSuccess] = useState("");
-    const [syncError, setSyncError] = useState("");
-    const [syncSuccess, setSyncSuccess] = useState("");
     const [form, setForm] = useState({
         teamName: "",
         collegeName: "",
@@ -313,44 +311,6 @@ export default function AdminTeamsPage() {
         setActionLoading(null);
     };
 
-    const syncCommitsNow = async () => {
-        setSyncError("");
-        setSyncSuccess("");
-        setActionLoading("sync_commits");
-        try {
-            const res = await fetch("/api/admin/commits/sync", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ force: true }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                setSyncError(data.error || "Failed to sync commits");
-                return;
-            }
-            const summary = data.summary;
-            const synced = summary?.synced ?? 0;
-            const skipped = summary?.skipped ?? 0;
-            const failed = summary?.failed ?? 0;
-            const hasRateLimit = Array.isArray(summary?.results)
-                && summary.results.some((r: any) => r?.reason === "GITHUB_RATE_LIMIT");
-
-            if (failed > 0 && hasRateLimit) {
-                setSyncError(
-                    `GitHub rate limit hit. Synced: ${synced}, skipped: ${skipped}, failed: ${failed}. Add GITHUB_TOKEN in .env to avoid reset attempts.`
-                );
-            } else {
-                setSyncSuccess(
-                    `Commit sync complete: ${synced} synced, ${skipped} skipped, ${failed} failed.`
-                );
-            }
-            fetchTeams();
-        } catch {
-            setSyncError("Network error while syncing commits");
-        }
-        setActionLoading(null);
-    };
-
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -362,35 +322,12 @@ export default function AdminTeamsPage() {
                         <p className="text-sm text-muted-foreground mt-1">{teams.length} teams registered</p>
                     </div>
                     <div className="flex items-center gap-2">
-                        {isSuperAdmin && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={syncCommitsNow}
-                                disabled={actionLoading === "sync_commits"}
-                                className="font-mono text-xs"
-                            >
-                                {actionLoading === "sync_commits" ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                                Sync Commits Now
-                            </Button>
-                        )}
                         <Button variant="outline" size="sm" onClick={fetchTeams} disabled={loading} className="font-mono text-xs">
                             Refresh
                         </Button>
                     </div>
                 </div>
             </motion.div>
-
-            {syncError && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-mono">
-                    {syncError}
-                </div>
-            )}
-            {syncSuccess && (
-                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-mono">
-                    {syncSuccess}
-                </div>
-            )}
 
             {isSuperAdmin && (
                 <Card className="border-primary/30 bg-primary/[0.04]">

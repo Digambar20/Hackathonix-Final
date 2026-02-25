@@ -10,7 +10,7 @@ export async function GET() {
     mode: cfg.mode,
     problemSelectionStartAt: cfg.problemSelectionStartAt.toISOString(),
     hackathonEndAt: cfg.hackathonEndAt.toISOString(),
+    homepageCountdownTargetAt: cfg.homepageCountdownTargetAt.toISOString(),
     updatedAt: cfg.updatedAt.toISOString(),
   });
 }
-

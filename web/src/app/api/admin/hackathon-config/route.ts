@@ -22,6 +22,8 @@ export async function GET() {
     mode: cfg.mode,
     problemSelectionStartAt: cfg.problemSelectionStartAt.toISOString(),
     hackathonEndAt: cfg.hackathonEndAt.toISOString(),
+    testingHomepageCountdownTargetAt: cfg.testingHomepageCountdownTargetAt.toISOString(),
+    homepageCountdownTargetAt: cfg.homepageCountdownTargetAt.toISOString(),
     updatedAt: cfg.updatedAt.toISOString(),
   });
 }
@@ -43,6 +45,7 @@ export async function PATCH(req: NextRequest) {
       mode: body?.mode,
       problemSelectionStartAt: body?.problemSelectionStartAt,
       hackathonEndAt: body?.hackathonEndAt,
+      testingHomepageCountdownTargetAt: body?.testingHomepageCountdownTargetAt,
     });
 
     return NextResponse.json({
@@ -50,6 +53,8 @@ export async function PATCH(req: NextRequest) {
       mode: cfg.mode,
       problemSelectionStartAt: cfg.problemSelectionStartAt.toISOString(),
       hackathonEndAt: cfg.hackathonEndAt.toISOString(),
+      testingHomepageCountdownTargetAt: cfg.testingHomepageCountdownTargetAt.toISOString(),
+      homepageCountdownTargetAt: cfg.homepageCountdownTargetAt.toISOString(),
       updatedAt: cfg.updatedAt.toISOString(),
     });
   } catch (error) {
@@ -63,4 +68,3 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Failed to update hackathon config" }, { status: 500 });
   }
 }
-

@@ -1,7 +1,7 @@
 "use client";
 
 import { BackgroundPaths } from "@/components/ui/background-paths";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -10,10 +10,21 @@ import { RegistrationStats } from "@/components/registration/RegistrationStats";
 
 export function Hero() {
     const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+    const [countdownTargetIso, setCountdownTargetIso] = useState("2026-03-09T03:30:00.000Z");
 
     useEffect(() => {
-        // March 9, 2026 at 9:00 AM local event time
-        const target = new Date(2026, 2, 9, 9, 0, 0);
+        fetch("/api/hackathon/config", { cache: "no-store" })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (data?.homepageCountdownTargetAt) {
+                    setCountdownTargetIso(data.homepageCountdownTargetAt);
+                }
+            })
+            .catch(() => { });
+    }, []);
+
+    useEffect(() => {
+        const target = new Date(countdownTargetIso);
         const timer = setInterval(() => {
             const now = new Date();
             const diff = target.getTime() - now.getTime();
@@ -30,7 +41,7 @@ export function Hero() {
             });
         }, 1000);
         return () => clearInterval(timer);
-    }, []);
+    }, [countdownTargetIso]);
 
     return (
         <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden pt-16">
