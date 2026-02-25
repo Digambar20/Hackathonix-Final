@@ -12,11 +12,21 @@ interface ProblemStatementCardProps {
     problem: Problem;
     isSelected: boolean;
     isLocked: boolean;
-    onSelect: (id: string) => void;
+    selectionDisabled?: boolean;
+    selectionDisabledMessage?: string;
+    onSelect: (id: string) => void | Promise<void>;
     onLock: () => void;
 }
 
-export function ProblemStatementCard({ problem, isSelected, isLocked, onSelect, onLock }: ProblemStatementCardProps) {
+export function ProblemStatementCard({
+    problem,
+    isSelected,
+    isLocked,
+    selectionDisabled = false,
+    selectionDisabledMessage = "Selection not available yet",
+    onSelect,
+    onLock,
+}: ProblemStatementCardProps) {
     return (
         <motion.div
             layout
@@ -27,7 +37,8 @@ export function ProblemStatementCard({ problem, isSelected, isLocked, onSelect, 
             <Card className={cn(
                 "h-full flex flex-col transition-all duration-200 border-border bg-card/50 hover:border-muted-foreground/20",
                 isSelected && "border-primary/50 bg-primary/[0.04] ring-1 ring-primary/30",
-                isLocked && !isSelected && "opacity-50 grayscale pointer-events-none"
+                isLocked && !isSelected && "opacity-50 grayscale pointer-events-none",
+                selectionDisabled && !isSelected && "opacity-80"
             )}>
                 <CardHeader className="pb-3">
                     <div className="flex justify-between items-start gap-4">
@@ -66,6 +77,10 @@ export function ProblemStatementCard({ problem, isSelected, isLocked, onSelect, 
                         ) : (
                             <Button variant="ghost" disabled className="w-full text-muted-foreground">Locked</Button>
                         )
+                    ) : selectionDisabled ? (
+                        <Button variant="outline" disabled className="w-full border-border text-muted-foreground cursor-not-allowed">
+                            {selectionDisabledMessage}
+                        </Button>
                     ) : (
                         isSelected ? (
                             <Button className="w-full bg-primary text-primary-foreground font-bold hover:bg-primary/90" onClick={onLock}>

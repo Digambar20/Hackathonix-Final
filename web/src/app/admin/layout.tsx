@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, FileCode, LogOut, Shield, Menu, Bell } from "lucide-react";
+import { LayoutDashboard, Users, FileCode, LogOut, Shield, Menu, Bell, Handshake } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useEffect, useState } from "react";
@@ -15,6 +15,7 @@ const navItems = [
     { icon: Bell, label: "Approvals", href: "/admin/approvals" },
     { icon: Users, label: "Teams", href: "/admin/teams" },
     { icon: FileCode, label: "Problems", href: "/admin/problems" },
+    { icon: Handshake, label: "Sponsors", href: "/admin/sponsors" },
 ];
 
 function AdminSidebar({ className }: { className?: string }) {

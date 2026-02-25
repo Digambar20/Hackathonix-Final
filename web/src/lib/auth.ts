@@ -19,7 +19,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         return null;
                     }
 
-                    const email = credentials.email as string;
+                    const email = (credentials.email as string).trim().toLowerCase();
                     const password = credentials.password as string;
 
                     console.log(`[Auth] Attempting login with email: ${email}`);
@@ -48,7 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             console.error(`[Auth] Non-leader participant login blocked for email: ${email}`);
                             return null;
                         }
-                        if (user.team.id !== password) {
+                        if (user.team.id !== password.trim()) {
                             console.error(`[Auth] Invalid team ID. Expected: ${user.team.id}, Got: ${password}`);
                             return null;
                         }

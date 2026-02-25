@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { ONLINE_TEAM_LIMIT, TOTAL_TEAM_LIMIT } from "@/lib/registration-config";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 // GET — Fetch authenticated user's team status
 export async function GET() {
@@ -42,6 +46,12 @@ export async function GET() {
         memberCount: team.members.length,
         members: team.members,
         problemStatement: team.problemStatement,
+    }, {
+        headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+        },
     });
 }
 
@@ -82,7 +92,8 @@ export async function POST(req: NextRequest) {
         const now = new Date();
         const registrationStart = new Date(2026, 1, 26, 7, 0, 0); // Feb 26, 7 AM
         const registrationEnd = new Date(2026, 2, 6, 0, 0, 0); // Mar 6, 12 AM
-        const registrationLimit = 90;
+        const onlineRegistrationLimit = ONLINE_TEAM_LIMIT;
+        const totalRegistrationLimit = TOTAL_TEAM_LIMIT;
 
         // TESTING MODE: Registration window check DISABLED for testing
         // Uncomment below to enable registration window validation
@@ -102,11 +113,25 @@ export async function POST(req: NextRequest) {
         }
         */
 
-        // Check if registration limit reached
-        const totalRegistered = await prisma.team.count();
-        if (totalRegistered >= registrationLimit) {
+        // Enforce dual limits:
+        // 1) Max total teams
+        // 2) Max online/self-registration teams
+        const [totalRegistered, onlineRegistered] = await Promise.all([
+            prisma.team.count(),
+            prisma.team.count({ where: { registrationMode: "ONLINE" } }),
+        ]);
+
+        if (totalRegistered >= totalRegistrationLimit) {
             return NextResponse.json(
-                { error: `Registration limit (${registrationLimit} teams) has been reached. Thank you for your interest!` },
+                { error: `Total registration limit (${totalRegistrationLimit} teams) has been reached.` },
+                { status: 409 }
+            );
+        }
+        if (onlineRegistered >= onlineRegistrationLimit) {
+            return NextResponse.json(
+                {
+                    error: `Online registration limit (${onlineRegistrationLimit} teams) has been reached. Remaining teams will be onboarded by superadmins.`,
+                },
                 { status: 409 }
             );
         }
@@ -140,6 +165,8 @@ export async function POST(req: NextRequest) {
                 teamLeaderName: data.teamLeaderName,
                 teamLeaderEmail: leaderEmail,
                 teamLeaderPhone: data.teamLeaderPhone,
+                registrationSource: "ONLINE",
+                registrationMode: "ONLINE",
                 members: {
                     create: [
                         // Create team leader as first member
@@ -147,12 +174,16 @@ export async function POST(req: NextRequest) {
                             name: data.teamLeaderName,
                             email: leaderEmail,
                             role: "PARTICIPANT",
+                            teamName: data.teamName,
+                            registrationMode: "ONLINE",
                         },
                         // Create additional members
                         ...data.members.map((m: MemberData) => ({
                             name: m.name,
                             email: m.email.trim().toLowerCase(),
                             role: "PARTICIPANT",
+                            teamName: data.teamName,
+                            registrationMode: "ONLINE",
                         })),
                     ],
                 },

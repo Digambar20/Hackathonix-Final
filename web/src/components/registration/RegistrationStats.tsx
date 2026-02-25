@@ -6,8 +6,13 @@ import { Users, AlertCircle, TrendingUp } from "lucide-react";
 
 interface RegistrationData {
     totalRegistered: number;
+    onlineRegistered: number;
     registrationLimit: number;
+    onlineRegistrationLimit: number;
     spotsRemaining: number;
+    totalRegistrationLimit: number;
+    totalSpotsRemaining: number;
+    superadminRegistered: number;
     registrationClosed: boolean;
     registrationNotStarted: boolean;
 }
@@ -15,8 +20,13 @@ interface RegistrationData {
 export function RegistrationStats() {
     const [stats, setStats] = useState<RegistrationData>({
         totalRegistered: 0,
-        registrationLimit: 90,
-        spotsRemaining: 90,
+        onlineRegistered: 0,
+        registrationLimit: 80,
+        onlineRegistrationLimit: 80,
+        spotsRemaining: 80,
+        totalRegistrationLimit: 100,
+        totalSpotsRemaining: 100,
+        superadminRegistered: 0,
         registrationClosed: false,
         registrationNotStarted: false,
     });
@@ -25,7 +35,7 @@ export function RegistrationStats() {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await fetch("/api/registration/stats");
+                const res = await fetch("/api/registration/stats", { cache: "no-store" });
                 if (res.ok) {
                     const data = await res.json();
                     setStats(data);
@@ -43,7 +53,7 @@ export function RegistrationStats() {
         return () => clearInterval(interval);
     }, []);
 
-    const percentageFilled = (stats.totalRegistered / stats.registrationLimit) * 100;
+    const percentageFilled = (stats.onlineRegistered / stats.onlineRegistrationLimit) * 100;
     const isFull = stats.spotsRemaining <= 0;
 
     if (stats.registrationNotStarted) {
@@ -71,7 +81,11 @@ export function RegistrationStats() {
                         <h3 className="font-display font-bold text-red-500 uppercase">Registration Closed</h3>
                     </div>
                     <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Total Teams Registered:</span>
+                        <span className="text-muted-foreground">Online Teams Registered:</span>
+                        <span className="font-bold text-lg">{stats.onlineRegistered}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Total Teams (Online + Superadmin):</span>
                         <span className="font-bold text-lg">{stats.totalRegistered}</span>
                     </div>
                 </div>
@@ -91,7 +105,7 @@ export function RegistrationStats() {
                 <div className="grid grid-cols-2 gap-4">
                     <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
                         <div className="text-xs text-muted-foreground uppercase mb-1">Teams Registered</div>
-                        <div className="text-3xl font-bold text-primary">{isLoading ? "-" : stats.totalRegistered}</div>
+                        <div className="text-3xl font-bold text-primary">{isLoading ? "-" : stats.onlineRegistered}</div>
                     </div>
                     <div className={`border rounded-lg p-4 ${isFull ? "bg-red-500/5 border-red-500/20" : "bg-green-500/5 border-green-500/20"}`}>
                         <div className="text-xs text-muted-foreground uppercase mb-1">Spots Remaining</div>
@@ -104,8 +118,8 @@ export function RegistrationStats() {
                 {/* Progress Bar */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Registration Limit</span>
-                        <span className="font-semibold">{stats.totalRegistered} / {stats.registrationLimit}</span>
+                        <span className="text-muted-foreground">Online Registration Limit</span>
+                        <span className="font-semibold">{stats.onlineRegistered} / {stats.onlineRegistrationLimit}</span>
                     </div>
                     <div className="w-full h-3 bg-secondary rounded-full overflow-hidden">
                         <div
@@ -123,6 +137,11 @@ export function RegistrationStats() {
                             <span>{percentageFilled.toFixed(1)}% capacity</span>
                         )}
                     </div>
+                </div>
+
+                <div className="text-xs text-muted-foreground border-t border-border pt-2">
+                    Total capacity: <span className="font-semibold">{stats.totalRegistered} / {stats.totalRegistrationLimit}</span>
+                    {" "}({stats.superadminRegistered} added by superadmins)
                 </div>
 
                 {/* Warning if almost full */}

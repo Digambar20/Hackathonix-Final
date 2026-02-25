@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
+import { getHackathonConfig } from "@/lib/hackathon-config";
 
 const selectSchema = z.object({
     problemStatementId: z.string(),
@@ -19,13 +20,31 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+        const cfg = await getHackathonConfig();
+        const TESTING_MODE = cfg.mode === "TESTING";
+        const selectionStart = cfg.problemSelectionStartAt;
+        if (!TESTING_MODE && new Date() < selectionStart) {
+            const startLabel = selectionStart.toLocaleString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+            });
+            return NextResponse.json(
+                { error: `Problem selection has not started yet. It opens on ${startLabel}.` },
+                { status: 403 }
+            );
+        }
+
         const body = await req.json();
         const { problemStatementId } = selectSchema.parse(body);
 
         // Check if team already locked a PS
         const team = await prisma.team.findUnique({ where: { id: user.teamId } });
         if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
-        if (team.psStatus === "LOCKED") {
+        if (!TESTING_MODE && team.psStatus === "LOCKED") {
             return NextResponse.json({ error: "Your problem statement is already locked" }, { status: 400 });
         }
 

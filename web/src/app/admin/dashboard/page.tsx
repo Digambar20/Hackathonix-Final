@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, FileCode, CheckCircle, CreditCard, Activity, Shield, BarChart3, Database, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Users, FileCode, CheckCircle, CreditCard, Activity, Shield, BarChart3, Database, Download, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -21,14 +23,111 @@ type Team = {
 export default function AdminDashboardPage() {
     const [teams, setTeams] = useState<Team[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [configLoading, setConfigLoading] = useState(false);
+    const [configSaving, setConfigSaving] = useState(false);
+    const [configError, setConfigError] = useState("");
+    const [configSuccess, setConfigSuccess] = useState("");
+    const [eventMode, setEventMode] = useState<"TESTING" | "LIVE">("LIVE");
+    const [selectionStartInput, setSelectionStartInput] = useState("");
+    const [hackathonEndInput, setHackathonEndInput] = useState("");
+
+    const toInputValue = (iso: string) => {
+        const d = new Date(iso);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const y = d.getFullYear();
+        const m = pad(d.getMonth() + 1);
+        const day = pad(d.getDate());
+        const h = pad(d.getHours());
+        const min = pad(d.getMinutes());
+        return `${y}-${m}-${day}T${h}:${min}`;
+    };
+
+    const fetchEventConfig = async () => {
+        setConfigLoading(true);
+        setConfigError("");
+        try {
+            const res = await fetch("/api/admin/hackathon-config", { cache: "no-store" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setConfigError(data.error || "Failed to load event config");
+                return;
+            }
+            setEventMode(data.mode === "TESTING" ? "TESTING" : "LIVE");
+            setSelectionStartInput(toInputValue(data.problemSelectionStartAt));
+            setHackathonEndInput(toInputValue(data.hackathonEndAt));
+        } catch {
+            setConfigError("Failed to load event config");
+        } finally {
+            setConfigLoading(false);
+        }
+    };
 
     useEffect(() => {
-        fetch("/api/admin/teams")
-            .then(r => r.json())
-            .then(data => setTeams(Array.isArray(data) ? data : []))
-            .catch(() => { })
-            .finally(() => setLoading(false));
+        const fetchTeams = () => {
+            setLoadError("");
+            fetch("/api/admin/teams", { cache: "no-store" })
+                .then(async (r) => {
+                    const body = await r.json().catch(() => ({}));
+                    if (!r.ok) throw new Error(body?.error || `Failed to load teams (HTTP ${r.status})`);
+                    return body;
+                })
+                .then((data) => setTeams(Array.isArray(data) ? data : []))
+                .catch((err: unknown) => {
+                    setTeams([]);
+                    setLoadError(err instanceof Error ? err.message : "Failed to load teams");
+                })
+                .finally(() => setLoading(false));
+        };
+
+        fetchTeams();
+        const interval = setInterval(fetchTeams, 15000);
+        return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        fetch("/api/auth/session")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((session) => {
+                const superAdmin = session?.user?.role === "SUPERADMIN";
+                setIsSuperAdmin(superAdmin);
+                if (superAdmin) {
+                    fetchEventConfig();
+                }
+            })
+            .catch(() => setIsSuperAdmin(false));
+    }, []);
+
+    const saveEventConfig = async () => {
+        setConfigSaving(true);
+        setConfigError("");
+        setConfigSuccess("");
+        try {
+            const res = await fetch("/api/admin/hackathon-config", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    mode: eventMode,
+                    problemSelectionStartAt: selectionStartInput ? new Date(selectionStartInput).toISOString() : null,
+                    hackathonEndAt: hackathonEndInput ? new Date(hackathonEndInput).toISOString() : null,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setConfigError(data.error || "Failed to save event config");
+                return;
+            }
+            setConfigSuccess("Event mode and timers updated successfully.");
+            setEventMode(data.mode === "TESTING" ? "TESTING" : "LIVE");
+            setSelectionStartInput(toInputValue(data.problemSelectionStartAt));
+            setHackathonEndInput(toInputValue(data.hackathonEndAt));
+        } catch {
+            setConfigError("Failed to save event config");
+        } finally {
+            setConfigSaving(false);
+        }
+    };
 
     const totalTeams = teams.length;
     const totalMembers = teams.reduce((s, t) => s + t.memberCount, 0);
@@ -37,6 +136,9 @@ export default function AdminDashboardPage() {
     const lockedTeams = teams.filter(t => t.psStatus === "LOCKED").length;
     const repoLinked = teams.filter(t => !!t.repoUrl).length;
     const scoredTeams = teams.filter(t => t.avgScore !== null).length;
+    const averageTotalScore = scoredTeams > 0
+        ? Math.round(teams.filter(t => t.avgScore !== null).reduce((sum, t) => sum + (t.avgScore ?? 0), 0) / scoredTeams)
+        : 0;
 
     const stats = [
         { icon: Users, label: "Total Teams", value: totalTeams, color: "text-primary" },
@@ -46,6 +148,7 @@ export default function AdminDashboardPage() {
         { icon: FileCode, label: "PS Locked", value: lockedTeams, color: "text-yellow-500" },
         { icon: Activity, label: "Repo Linked", value: repoLinked, color: "text-blue-400" },
         { icon: BarChart3, label: "Scored", value: scoredTeams, color: "text-purple-400" },
+        { icon: BarChart3, label: "Avg Total Score", value: `${averageTotalScore} / 100`, color: "text-primary" },
         { icon: CheckCircle, label: "Pending Approvals", value: totalTeams - approvedTeams, color: totalTeams - approvedTeams > 0 ? "text-destructive" : "text-neon-green" },
     ];
 
@@ -60,6 +163,10 @@ export default function AdminDashboardPage() {
 
             {loading ? (
                 <div className="flex items-center justify-center py-16 text-muted-foreground">Loading...</div>
+            ) : loadError ? (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-mono">
+                    {loadError}
+                </div>
             ) : (
                 <>
                     {/* Stats Grid */}
@@ -90,7 +197,7 @@ export default function AdminDashboardPage() {
                             <CardTitle className="font-mono uppercase text-xs tracking-wider text-muted-foreground">Quick Actions</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                 <Link
                                     href="/admin/teams"
                                     className="block p-4 rounded-lg border border-border bg-muted/20 hover:border-primary/30 hover:bg-primary/[0.04] transition-all text-center"
@@ -112,9 +219,81 @@ export default function AdminDashboardPage() {
                                     <p className="text-sm font-bold text-foreground">Scoring</p>
                                     <p className="text-[10px] text-muted-foreground mt-1">{scoredTeams} teams scored so far</p>
                                 </div>
+                                <Link
+                                    href="/admin/admins"
+                                    className="block p-4 rounded-lg border border-border bg-muted/20 hover:border-primary/30 hover:bg-primary/[0.04] transition-all text-center"
+                                >
+                                    <ShieldAlert className="w-6 h-6 mx-auto mb-2 text-primary" />
+                                    <p className="text-sm font-bold text-foreground">Manage Admins</p>
+                                    <p className="text-[10px] text-muted-foreground mt-1">Superadmin-only admin controls</p>
+                                </Link>
                             </div>
                         </CardContent>
                     </Card>
+
+                    {isSuperAdmin && (
+                        <Card className="border-primary/30 bg-primary/[0.04]">
+                            <CardHeader>
+                                <CardTitle className="font-mono uppercase text-xs tracking-wider text-muted-foreground">Superadmin Event Control</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {configError && (
+                                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-mono">
+                                        {configError}
+                                    </div>
+                                )}
+                                {configSuccess && (
+                                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-mono">
+                                        {configSuccess}
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <Button
+                                        variant={eventMode === "LIVE" ? "default" : "outline"}
+                                        className={eventMode === "LIVE" ? "bg-primary text-primary-foreground" : ""}
+                                        onClick={() => setEventMode("LIVE")}
+                                        disabled={configLoading || configSaving}
+                                    >
+                                        Live Published Mode
+                                    </Button>
+                                    <Button
+                                        variant={eventMode === "TESTING" ? "default" : "outline"}
+                                        className={eventMode === "TESTING" ? "bg-primary text-primary-foreground" : ""}
+                                        onClick={() => setEventMode("TESTING")}
+                                        disabled={configLoading || configSaving}
+                                    >
+                                        Testing Mode
+                                    </Button>
+                                    <Button variant="outline" onClick={fetchEventConfig} disabled={configLoading || configSaving}>
+                                        {configLoading ? "Loading..." : "Reload Config"}
+                                    </Button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Problem Selection Start</Label>
+                                        <Input
+                                            type="datetime-local"
+                                            value={selectionStartInput}
+                                            onChange={(e) => setSelectionStartInput(e.target.value)}
+                                            disabled={configLoading || configSaving}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Hackathon End Time</Label>
+                                        <Input
+                                            type="datetime-local"
+                                            value={hackathonEndInput}
+                                            onChange={(e) => setHackathonEndInput(e.target.value)}
+                                            disabled={configLoading || configSaving}
+                                        />
+                                    </div>
+                                </div>
+                                <Button onClick={saveEventConfig} disabled={configLoading || configSaving} className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold">
+                                    {configSaving ? "Saving..." : "Save Event Settings"}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     {/* Database Export */}
                     <Card className="border-border bg-card/50">

@@ -5,7 +5,7 @@ import { isAllowedAdminEmail } from "@/lib/admin-access";
 const protectedRoutes: Record<string, string[]> = {
     "/dashboard": ["PARTICIPANT"],
     "/judge": ["JUDGE"],
-    "/admin": ["ADMIN"],
+    "/admin": ["ADMIN", "SUPERADMIN"],
 };
 
 export default async function proxy(req: NextRequest) {
@@ -37,8 +37,8 @@ export default async function proxy(req: NextRequest) {
         return NextResponse.redirect(new URL("/", req.url));
     }
 
-    // Extra protection: only allowlisted admin emails can access /admin routes.
-    if (matchedPrefix === "/admin" && !isAllowedAdminEmail(email)) {
+    // Extra protection for SUPERADMIN: only allowlisted emails can hold superadmin access.
+    if (matchedPrefix === "/admin" && role === "SUPERADMIN" && !isAllowedAdminEmail(email)) {
         return NextResponse.redirect(new URL("/", req.url));
     }
 

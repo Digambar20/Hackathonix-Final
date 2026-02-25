@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
+import { COMMIT_COUNT_CAP, COMMIT_SYNC_INTERVAL_HOURS, syncTeamCommitValidation } from "@/lib/commit-validation";
 
 const repoSchema = z.object({
     repoUrl: z.string().url().refine((url) => url.includes("github.com"), {
@@ -71,6 +72,12 @@ export async function POST(req: NextRequest) {
         }
 
         if (!repoRes.ok) {
+            if (repoRes.status === 403) {
+                return NextResponse.json(
+                    { error: "GitHub API rate limit reached while verifying repository. Please try again shortly." },
+                    { status: 429 }
+                );
+            }
             return NextResponse.json({ error: "Failed to verify repository with GitHub" }, { status: 502 });
         }
 
@@ -82,27 +89,35 @@ export async function POST(req: NextRequest) {
             }, { status: 400 });
         }
 
-        // Fetch latest commits
-        const commitsRes = await githubFetch(`/repos/${parsed.owner}/${parsed.repo}/commits?per_page=1`);
-        let lastCommitDate = null;
-        let lastCommitMessage = null;
-        let totalCommits = 0;
-
-        if (commitsRes.ok) {
-            const commits = await commitsRes.json();
-            if (commits.length > 0) {
-                lastCommitDate = commits[0].commit?.committer?.date || commits[0].commit?.author?.date;
-                lastCommitMessage = commits[0].commit?.message;
-            }
-            // Get total commit count from the Link header or contributors endpoint
-            // Simple approach: use the repo's default branch commit count
-        }
-
         // Save to DB
         await prisma.team.update({
             where: { id: user.teamId },
             data: { repoUrl },
         });
+
+        const syncResult = await syncTeamCommitValidation(user.teamId, true);
+        const teamAfterSync = await prisma.team.findUnique({
+            where: { id: user.teamId },
+            select: {
+                rawCommitCount: true,
+                countedCommitCount: true,
+                leaderCommitCount: true,
+                leaderCommitValidated: true,
+                lastCommitSyncAt: true,
+            },
+        });
+
+        const commitValidation = syncResult.ok
+            ? (syncResult as any).data
+            : {
+                rawCommitCount: teamAfterSync?.rawCommitCount ?? 0,
+                countedCommitCount: teamAfterSync?.countedCommitCount ?? 0,
+                leaderCommitCount: teamAfterSync?.leaderCommitCount ?? 0,
+                leaderCommitValidated: teamAfterSync?.leaderCommitValidated ?? false,
+                cap: COMMIT_COUNT_CAP,
+                intervalHours: COMMIT_SYNC_INTERVAL_HOURS,
+                syncedAt: teamAfterSync?.lastCommitSyncAt?.toISOString?.() ?? null,
+            };
 
         return NextResponse.json({
             success: true,
@@ -115,9 +130,9 @@ export async function POST(req: NextRequest) {
                 stars: repoData.stargazers_count,
                 defaultBranch: repoData.default_branch,
                 createdAt: repoData.created_at,
-                lastCommitDate,
-                lastCommitMessage,
             },
+            commitValidation,
+            syncWarning: syncResult.ok ? null : (syncResult as any).reason ?? "SYNC_FAILED",
         });
     } catch (err) {
         if (err instanceof z.ZodError) {
@@ -128,7 +143,7 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// GET — Fetch real-time repo data for the authenticated team
+// GET — Fetch repo + commit-validation data from DB cache (no live GitHub calls)
 export async function GET() {
     const session = await auth();
     if (!session?.user) {
@@ -141,7 +156,19 @@ export async function GET() {
     }
 
     try {
-        const team = await prisma.team.findUnique({ where: { id: user.teamId } });
+        const team = await prisma.team.findUnique({
+            where: { id: user.teamId },
+            select: {
+                repoUrl: true,
+                createdAt: true,
+                updatedAt: true,
+                rawCommitCount: true,
+                countedCommitCount: true,
+                leaderCommitCount: true,
+                leaderCommitValidated: true,
+                lastCommitSyncAt: true,
+            },
+        });
         if (!team || !team.repoUrl) {
             return NextResponse.json({ error: "No repository linked" }, { status: 404 });
         }
@@ -151,56 +178,33 @@ export async function GET() {
             return NextResponse.json({ error: "Invalid stored repository URL" }, { status: 500 });
         }
 
-        // Fetch repo info
-        const repoRes = await githubFetch(`/repos/${parsed.owner}/${parsed.repo}`);
-        if (!repoRes.ok) {
-            return NextResponse.json({
-                repoUrl: team.repoUrl,
-                error: "Could not fetch repo data from GitHub",
-                offline: true,
-            });
-        }
-        const repoData = await repoRes.json();
-
-        // Fetch recent commits (last 5)
-        const commitsRes = await githubFetch(`/repos/${parsed.owner}/${parsed.repo}/commits?per_page=5`);
-        let commits: any[] = [];
-        let totalCommits = 0;
-
-        if (commitsRes.ok) {
-            commits = await commitsRes.json();
-
-            // Estimate total commits from Link header
-            const linkHeader = commitsRes.headers.get("Link");
-            if (linkHeader) {
-                const lastMatch = linkHeader.match(/page=(\d+)>;\s*rel="last"/);
-                if (lastMatch) {
-                    totalCommits = parseInt(lastMatch[1], 10);
-                }
-            }
-            // Fallback: if no pagination, it means all commits fit in one page
-            if (totalCommits === 0) totalCommits = commits.length;
-        }
+        const repoName = `${parsed.owner}/${parsed.repo}`;
 
         return NextResponse.json({
             repoUrl: team.repoUrl,
-            name: repoData.full_name,
-            description: repoData.description,
-            isPublic: !repoData.private,
-            language: repoData.language,
-            stars: repoData.stargazers_count,
-            forks: repoData.forks_count,
-            openIssues: repoData.open_issues_count,
-            defaultBranch: repoData.default_branch,
-            createdAt: repoData.created_at,
-            updatedAt: repoData.updated_at,
-            totalCommits,
-            recentCommits: commits.map((c: any) => ({
-                sha: c.sha?.substring(0, 7),
-                message: c.commit?.message?.split("\n")[0], // first line only
-                author: c.commit?.author?.name,
-                date: c.commit?.author?.date,
-            })),
+            name: repoName,
+            description: "Repository linked. Commit validation data is synced periodically.",
+            isPublic: true,
+            language: null,
+            stars: 0,
+            forks: 0,
+            openIssues: 0,
+            defaultBranch: "main",
+            createdAt: team.createdAt.toISOString(),
+            updatedAt: (team.lastCommitSyncAt ?? team.updatedAt).toISOString(),
+            totalCommits: team.rawCommitCount ?? 0,
+            recentCommits: [],
+            offline: false,
+            syncMode: "SCHEDULED",
+            commitValidation: {
+                rawCommitCount: team.rawCommitCount ?? 0,
+                countedCommitCount: team.countedCommitCount ?? 0,
+                leaderCommitCount: team.leaderCommitCount ?? 0,
+                leaderCommitValidated: team.leaderCommitValidated ?? false,
+                cap: COMMIT_COUNT_CAP,
+                intervalHours: COMMIT_SYNC_INTERVAL_HOURS,
+                syncedAt: team.lastCommitSyncAt?.toISOString?.() ?? null,
+            },
         });
     } catch (err) {
         console.error("Repo data fetch error:", err);

@@ -35,6 +35,16 @@ export type RepoData = {
     recentCommits: RepoCommit[];
     offline?: boolean;
     error?: string;
+    syncMode?: "SCHEDULED" | string;
+    commitValidation?: {
+        rawCommitCount: number;
+        countedCommitCount: number;
+        leaderCommitCount: number;
+        leaderCommitValidated: boolean;
+        cap?: number;
+        intervalHours?: number;
+        syncedAt?: string | null;
+    };
 };
 
 export type TeamStatus = {
@@ -58,8 +68,17 @@ export type TeamNotification = {
     createdAt: string;
 };
 
-const REPO_POLL_INTERVAL = 10000; // 10 seconds
+const REPO_POLL_INTERVAL = 120000; // 2 minutes
 const NOTIFICATION_POLL_INTERVAL = 15000; // 15 seconds
+const DEFAULT_PROBLEM_SELECTION_START_ISO = "2026-03-09T04:00:00.000Z"; // 09:30 IST
+const DEFAULT_HACKATHON_END_ISO = "2026-03-09T14:00:00.000Z"; // 19:30 IST
+
+type HackathonEventConfig = {
+    mode: "TESTING" | "LIVE";
+    problemSelectionStartAt: string;
+    hackathonEndAt: string;
+    updatedAt?: string;
+};
 
 export function useHackathon() {
     const [problems, setProblems] = useState<Problem[]>([]);
@@ -71,9 +90,15 @@ export function useHackathon() {
     const [repoData, setRepoData] = useState<RepoData | null>(null);
     const [repoLoading, setRepoLoading] = useState(false);
     const [repoError, setRepoError] = useState<string | null>(null);
+    const [selectionError, setSelectionError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [teamStatus, setTeamStatus] = useState<TeamStatus | null>(null);
     const [notifications, setNotifications] = useState<TeamNotification[]>([]);
+    const [eventConfig, setEventConfig] = useState<HackathonEventConfig>({
+        mode: "LIVE",
+        problemSelectionStartAt: DEFAULT_PROBLEM_SELECTION_START_ISO,
+        hackathonEndAt: DEFAULT_HACKATHON_END_ISO,
+    });
 
     // Timer phases:
     // - Before start: countdown to Mar 9, 2026 9:30 AM
@@ -81,21 +106,46 @@ export function useHackathon() {
     // - After end: 00:00:00
     const [timeLeft, setTimeLeft] = useState("10:00:00");
     const [timerPhase, setTimerPhase] = useState<"PRE_EVENT" | "HACKATHON" | "ENDED">("PRE_EVENT");
+    const isTestingMode = eventConfig.mode === "TESTING";
+
+    const fetchEventConfig = useCallback(async () => {
+        try {
+            const res = await fetch("/api/hackathon/config", { cache: "no-store" });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data?.mode && data?.problemSelectionStartAt && data?.hackathonEndAt) {
+                setEventConfig({
+                    mode: data.mode === "TESTING" ? "TESTING" : "LIVE",
+                    problemSelectionStartAt: data.problemSelectionStartAt,
+                    hackathonEndAt: data.hackathonEndAt,
+                    updatedAt: data.updatedAt,
+                });
+            }
+        } catch { }
+    }, []);
 
     useEffect(() => {
-        const startTime = new Date(2026, 2, 9, 9, 30, 0); // Mar 9, 2026 9:30 AM
-        const endTime = new Date(2026, 2, 9, 19, 30, 0); // Mar 9, 2026 7:30 PM
+        fetchEventConfig();
+    }, [fetchEventConfig]);
 
+    useEffect(() => {
+        const cfgPoll = setInterval(fetchEventConfig, 30000);
+        return () => clearInterval(cfgPoll);
+    }, [fetchEventConfig]);
+
+    useEffect(() => {
+        const selectionStart = new Date(eventConfig.problemSelectionStartAt);
+        const hackathonEnd = new Date(eventConfig.hackathonEndAt);
         const timer = setInterval(() => {
             const now = new Date();
-            let targetTime = startTime;
+            let targetTime = selectionStart;
 
-            if (now < startTime) {
+            if (now < selectionStart) {
                 setTimerPhase("PRE_EVENT");
-                targetTime = startTime;
-            } else if (now < endTime) {
+                targetTime = selectionStart;
+            } else if (now < hackathonEnd) {
                 setTimerPhase("HACKATHON");
-                targetTime = endTime;
+                targetTime = hackathonEnd;
             } else {
                 setTimerPhase("ENDED");
                 setTimeLeft("00:00:00");
@@ -118,7 +168,7 @@ export function useHackathon() {
         }, 1000);
 
         return () => clearInterval(timer);
-    }, []);
+    }, [eventConfig.problemSelectionStartAt, eventConfig.hackathonEndAt]);
 
     // Fetch real problems from API
     useEffect(() => {
@@ -135,7 +185,7 @@ export function useHackathon() {
     // Fetch team status
     const fetchTeamStatus = useCallback(async () => {
         try {
-            const res = await fetch("/api/teams");
+            const res = await fetch("/api/teams", { cache: "no-store" });
             if (res.ok) {
                 const data = await res.json();
                 setTeamStatus(data);
@@ -143,6 +193,11 @@ export function useHackathon() {
                 if (data.repoUrl) {
                     setStatus("SUBMITTED");
                     setRepoUrl(data.repoUrl);
+                } else if (data.psStatus === "PENDING") {
+                    setStatus("CHOOSING");
+                    if (data.problemStatement) {
+                        setSelectedProblemId(data.problemStatement.id);
+                    }
                 } else if (data.psStatus === "LOCKED") {
                     setStatus("LOCKED");
                     if (data.problemStatement) {
@@ -203,21 +258,49 @@ export function useHackathon() {
         return () => clearInterval(interval);
     }, [fetchNotifications]);
 
-    const selectProblem = (id: string) => {
-        setSelectedProblemId(id);
+    const selectProblem = async (id: string) => {
+        setSelectionError(null);
+        // Testing mode: unlock UI flow immediately, then sync best-effort.
+        if (isTestingMode) {
+            setSelectedProblemId(id);
+            setStatus("CHOOSING");
+        }
+        try {
+            const res = await fetch("/api/problems/select", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ problemStatementId: id }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (!isTestingMode) {
+                    setSelectionError(data.error || "Failed to select problem statement");
+                }
+                return;
+            }
+            setSelectedProblemId(id);
+            setStatus("CHOOSING");
+            await fetchTeamStatus();
+        } catch {
+            setSelectionError("Network error while selecting problem statement");
+        }
     };
 
-    const lockProblem = async () => {
-        if (!selectedProblemId) return;
+    const lockProblem = async (problemId?: string) => {
+        const targetProblemId = problemId ?? selectedProblemId;
+        if (!targetProblemId) return;
         try {
             const res = await fetch("/api/problems/lock", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ problemId: selectedProblemId }),
+                body: JSON.stringify({ problemId: targetProblemId }),
             });
+            const data = await res.json().catch(() => ({}));
             if (res.ok) {
+                setSelectedProblemId(data.problemStatementId ?? targetProblemId);
                 setStatus("LOCKED");
                 setLockTime(new Date());
+                await fetchTeamStatus();
             }
         } catch { }
     };
@@ -259,9 +342,13 @@ export function useHackathon() {
         lockTime,
         timeLeft,
         timerPhase,
+        canSelectProblems: isTestingMode || timerPhase !== "PRE_EVENT",
+        isTestingMode,
+        eventConfig,
         repoData,
         repoLoading,
         repoError,
+        selectionError,
         submitting,
         teamStatus,
         notifications,

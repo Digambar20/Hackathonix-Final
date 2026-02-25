@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal, Github, CheckCircle, GitCommit, Star, GitFork, ExternalLink, Clock, Code, RefreshCw, Loader2, XCircle, ShieldCheck, CreditCard, AlertTriangle, Bell } from "lucide-react";
+import { Github, CheckCircle, GitCommit, ExternalLink, RefreshCw, Loader2, XCircle, ShieldCheck, CreditCard, AlertTriangle, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 
@@ -78,13 +78,15 @@ function timeAgo(dateStr: string): string {
 export default function DashboardPage() {
     const {
         status, selectedProblemId, timeLeft, timerPhase,
-        repoData, repoLoading, repoError, submitting, teamStatus, notifications,
+        repoData, repoLoading, repoError, submitting, teamStatus, notifications, eventConfig, isTestingMode,
         submitRepo, fetchRepoData, problems
     } = useHackathon();
     const [repoInput, setRepoInput] = useState("");
     const [now, setNow] = useState(new Date());
 
     const selectedProblem = problems.find(p => p.id === selectedProblemId);
+    const selectionStartLabel = new Date(eventConfig.problemSelectionStartAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    const hackathonEndLabel = new Date(eventConfig.hackathonEndAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
     // Live clock
     useEffect(() => {
@@ -111,11 +113,14 @@ export default function DashboardPage() {
                         <CountdownTimer timeStr={timeLeft} />
                         <p className="text-xs text-muted-foreground mt-2">
                             {timerPhase === "PRE_EVENT"
-                                ? "Hackathon starts at 09:30 AM"
+                                ? `Hackathon starts at ${selectionStartLabel}`
                                 : timerPhase === "HACKATHON"
-                                    ? "Hackathon ends at 07:30 PM"
+                                    ? `Hackathon ends at ${hackathonEndLabel}`
                                     : "Hackathon has ended"}{" "}
                             · {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} IST
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                            Mode: {isTestingMode ? "TESTING" : "LIVE"}
                         </p>
                     </div>
                     <div className="flex flex-col items-center lg:items-end gap-1">
@@ -192,7 +197,7 @@ export default function DashboardPage() {
                             {status === "SUBMITTED" && (
                                 <p className="text-[10px] text-neon-green mt-1 flex items-center gap-1">
                                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />
-                                    Live · refreshes every 10s
+                                    Validation syncs periodically
                                 </p>
                             )}
                         </CardContent>
@@ -304,7 +309,7 @@ export default function DashboardPage() {
                                 </CardContent>
                             </Card>
 
-                            {/* Real-Time Repo Data Panel */}
+                            {/* Repo Validation Data Panel */}
                             {status === "SUBMITTED" && (
                                 <motion.div
                                     initial={{ opacity: 0, y: 12 }}
@@ -313,7 +318,7 @@ export default function DashboardPage() {
                                 >
                                     <Card className="border-border bg-card/50">
                                         <CardHeader className="flex flex-row items-center justify-between">
-                                            <CardTitle className="font-mono uppercase text-xs tracking-wider text-muted-foreground">Live Repository Data</CardTitle>
+                                            <CardTitle className="font-mono uppercase text-xs tracking-wider text-muted-foreground">Repository Validation Data</CardTitle>
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -329,7 +334,7 @@ export default function DashboardPage() {
                                             {repoLoading && !repoData ? (
                                                 <div className="flex items-center justify-center py-8">
                                                     <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                                                    <span className="ml-2 text-sm text-muted-foreground">Fetching repo data...</span>
+                                                    <span className="ml-2 text-sm text-muted-foreground">Refreshing validation data...</span>
                                                 </div>
                                             ) : repoData ? (
                                                 <div className="space-y-4">
@@ -337,38 +342,44 @@ export default function DashboardPage() {
                                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                                         <div className="bg-muted/30 rounded-lg p-3 border border-border">
                                                             <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-mono uppercase mb-1">
-                                                                <GitCommit className="w-3 h-3" /> Commits
+                                                                <GitCommit className="w-3 h-3" /> Raw Commits
                                                             </div>
-                                                            <div className="text-xl font-bold font-mono text-foreground">{repoData.totalCommits}</div>
+                                                            <div className="text-xl font-bold font-mono text-foreground">{repoData.commitValidation?.rawCommitCount ?? repoData.totalCommits}</div>
                                                         </div>
                                                         <div className="bg-muted/30 rounded-lg p-3 border border-border">
                                                             <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-mono uppercase mb-1">
-                                                                <Star className="w-3 h-3" /> Stars
+                                                                <GitCommit className="w-3 h-3" /> Counted
                                                             </div>
-                                                            <div className="text-xl font-bold font-mono text-foreground">{repoData.stars}</div>
+                                                            <div className="text-xl font-bold font-mono text-foreground">{repoData.commitValidation?.countedCommitCount ?? 0}</div>
                                                         </div>
                                                         <div className="bg-muted/30 rounded-lg p-3 border border-border">
                                                             <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-mono uppercase mb-1">
-                                                                <GitFork className="w-3 h-3" /> Forks
+                                                                <GitCommit className="w-3 h-3" /> Leader Commits
                                                             </div>
-                                                            <div className="text-xl font-bold font-mono text-foreground">{repoData.forks}</div>
+                                                            <div className="text-xl font-bold font-mono text-foreground">{repoData.commitValidation?.leaderCommitCount ?? 0}</div>
                                                         </div>
                                                         <div className="bg-muted/30 rounded-lg p-3 border border-border">
                                                             <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-mono uppercase mb-1">
-                                                                <Code className="w-3 h-3" /> Language
+                                                                <CheckCircle className="w-3 h-3" /> Leader Validation
                                                             </div>
-                                                            <div className="text-lg font-bold font-mono text-foreground truncate">{repoData.language || "—"}</div>
+                                                            <div className={`text-sm font-bold font-mono truncate ${repoData.commitValidation?.leaderCommitValidated ? "text-neon-green" : "text-destructive"}`}>
+                                                                {repoData.commitValidation?.leaderCommitValidated ? "VALID" : "NOT VALID"}
+                                                            </div>
                                                         </div>
                                                     </div>
 
                                                     {/* Repo meta */}
                                                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${repoData.isPublic ? "bg-neon-green/10 text-neon-green border border-neon-green/20" : "bg-destructive/10 text-destructive border border-destructive/20"}`}>
-                                                            {repoData.isPublic ? "PUBLIC" : "PRIVATE"}
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/20">
+                                                            SYNCED CACHE
                                                         </span>
-                                                        <span className="font-mono">{repoData.defaultBranch}</span>
+                                                        <span className="font-mono">
+                                                            Cap {repoData.commitValidation?.cap ?? 5}
+                                                        </span>
                                                         <span>·</span>
-                                                        <span>Created {timeAgo(repoData.createdAt)}</span>
+                                                        <span>
+                                                            Last sync {repoData.commitValidation?.syncedAt ? timeAgo(repoData.commitValidation.syncedAt) : "not yet"}
+                                                        </span>
                                                         <a
                                                             href={repoData.repoUrl}
                                                             target="_blank"
@@ -379,27 +390,9 @@ export default function DashboardPage() {
                                                         </a>
                                                     </div>
 
-                                                    {/* Recent Commits */}
-                                                    {repoData.recentCommits && repoData.recentCommits.length > 0 && (
-                                                        <div className="space-y-2">
-                                                            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Recent Commits</p>
-                                                            <div className="space-y-1.5">
-                                                                {repoData.recentCommits.map((commit) => (
-                                                                    <div
-                                                                        key={commit.sha}
-                                                                        className="flex items-start gap-3 text-xs border-l-2 border-primary/30 pl-3 py-1.5 hover:border-primary transition-colors"
-                                                                    >
-                                                                        <code className="text-primary font-mono shrink-0">{commit.sha}</code>
-                                                                        <span className="text-foreground truncate flex-1">{commit.message}</span>
-                                                                        <span className="text-muted-foreground shrink-0 flex items-center gap-1">
-                                                                            <Clock className="w-2.5 h-2.5" />
-                                                                            {timeAgo(commit.date)}
-                                                                        </span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                                    <p className="text-[10px] font-mono text-muted-foreground">
+                                                        Commit data is read from database snapshots and updated by scheduled sync.
+                                                    </p>
                                                 </div>
                                             ) : (
                                                 <p className="text-sm text-muted-foreground py-4 text-center">No repo data available</p>
@@ -456,10 +449,10 @@ export default function DashboardPage() {
                                     <div className="space-y-2">
                                         <p className="text-[10px] font-mono text-muted-foreground uppercase">Recent Events</p>
                                         <div className="space-y-2">
-                                            {status === "SUBMITTED" && repoData && repoData.recentCommits?.[0] && (
+                                            {status === "SUBMITTED" && repoData?.commitValidation && (
                                                 <div className="text-xs border-l-2 border-neon-green/50 pl-3 py-1">
-                                                    <span className="text-neon-green font-bold font-mono">{timeAgo(repoData.recentCommits[0].date)}</span>
-                                                    <span className="text-muted-foreground ml-2">Latest commit pushed</span>
+                                                    <span className="text-neon-green font-bold font-mono">{repoData.commitValidation.countedCommitCount}</span>
+                                                    <span className="text-muted-foreground ml-2">Counted commits</span>
                                                 </div>
                                             )}
                                             {status === "SUBMITTED" && (
@@ -487,7 +480,7 @@ export default function DashboardPage() {
                                                 <span className="text-muted-foreground ml-2">Problem Locked</span>
                                             </div>
                                             <div className="text-xs border-l-2 border-border pl-3 py-1 text-muted-foreground">
-                                                <span className="text-foreground font-mono">09:30 AM</span>
+                                                <span className="text-foreground font-mono">{selectionStartLabel}</span>
                                                 <span className="ml-2">Event Started</span>
                                             </div>
                                         </div>

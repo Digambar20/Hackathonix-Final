@@ -20,7 +20,7 @@ export default function JudgeDashboardPage() {
             .finally(() => setLoading(false));
     }, []);
 
-    const scoredCount = teams.filter(t => t.scores && t.scores.length > 0).length;
+    const scoredCount = teams.filter(t => (typeof t.scoresCount === "number" ? t.scoresCount > 0 : t.avgScore !== null)).length;
 
     return (
         <div className="space-y-8 max-w-6xl mx-auto">

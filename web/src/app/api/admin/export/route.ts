@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isAllowedAdminEmail } from "@/lib/admin-access";
+import { hasAdminAccess } from "@/lib/admin-access";
 
 function escapeXml(value: unknown): string {
     const str = value == null ? "" : String(value);
@@ -57,16 +57,17 @@ export async function GET() {
     }
 
     const user = session.user as any;
-    if (user.role !== "ADMIN" || !isAllowedAdminEmail(user.email)) {
+    if (!hasAdminAccess(user)) {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const [teams, users, problems, scores, notifications] = await Promise.all([
+    const [teams, users, problems, scores, notifications, sponsors] = await Promise.all([
         prisma.team.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.user.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.problemStatement.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.score.findMany({ orderBy: { createdAt: "desc" } }),
         prisma.notification.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.sponsor.findMany({ orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }] }),
     ]);
 
     const workbookXml = `<?xml version="1.0"?>
@@ -86,6 +87,7 @@ export async function GET() {
   ${toSheetXml("ProblemStatements", problems as unknown as Record<string, unknown>[])}
   ${toSheetXml("Scores", scores as unknown as Record<string, unknown>[])}
   ${toSheetXml("Notifications", notifications as unknown as Record<string, unknown>[])}
+  ${toSheetXml("Sponsors", sponsors as unknown as Record<string, unknown>[])}
 </Workbook>`;
 
     const fileName = `hackthonix-db-export-${new Date().toISOString().slice(0, 10)}.xls`;
@@ -99,4 +101,3 @@ export async function GET() {
         },
     });
 }
-

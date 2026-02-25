@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/commits/sync",
+      "schedule": "0 */2 * * *"
+    }
+  ]
+}
+

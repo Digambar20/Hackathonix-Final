@@ -1,0 +1,47 @@
+HACKATHONIX - START HERE (NEW SYSTEM SETUP)
+===========================================
+
+Project runtime is inside: web/
+
+1) Install prerequisites
+- Node.js 20+ and npm
+- PostgreSQL 14+ (local or managed)
+
+2) Open terminal in project root and run:
+
+   cd web
+   npm run setup
+
+This command will:
+- create .env from .env.example (if missing)
+- install dependencies
+- generate Prisma client
+- try DB migrations
+- run an ops check
+
+3) Edit env file:
+
+   web/.env
+
+Set at least:
+- DATABASE_URL
+- NEXTAUTH_SECRET
+- GITHUB_TOKEN (recommended for GitHub validation)
+- CRON_SECRET (or VERCEL_CRON_SECRET)
+
+4) Start app:
+
+   cd web
+   npm run dev
+
+5) Optional sanity verification:
+
+   cd web
+   npm run e2e:sanity
+
+6) Production ops checks:
+
+   cd web
+   npm run ops:check
+   npm run db:backup
+

@@ -1,22 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { isAllowedAdminEmail } from "@/lib/admin-access";
+import { hasAdminAccess } from "@/lib/admin-access";
 import { z } from "zod";
+import { getHackathonConfig } from "@/lib/hackathon-config";
 
-const createSchema = z.object({
-    title: z.string().min(3),
-    description: z.string().min(10),
-    category: z.string().min(2),
-    difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
-    tags: z.array(z.string()).default([]),
-});
+function createSchemaForMode(isTestingMode: boolean) {
+    return z.object({
+        title: z.string().trim().min(isTestingMode ? 1 : 3),
+        description: z.string().trim().min(isTestingMode ? 1 : 10),
+        category: z.string().trim().min(isTestingMode ? 1 : 2),
+        difficulty: z.preprocess(
+            (v) => (typeof v === "string" ? v.toUpperCase().trim() : v),
+            z.enum(["EASY", "MEDIUM", "HARD"]).default("MEDIUM")
+        ),
+        tags: z.preprocess((v) => {
+            if (Array.isArray(v)) return v;
+            if (typeof v === "string") {
+                return v.split(",").map((x) => x.trim()).filter(Boolean);
+            }
+            return [];
+        }, z.array(z.string()).default([])),
+    });
+}
 
 async function requireAdmin() {
     const session = await auth();
     if (!session?.user) return null;
     const user = session.user as any;
-    if (user.role !== "ADMIN" || !isAllowedAdminEmail(user.email)) return null;
+    if (!hasAdminAccess(user)) return null;
     return user;
 }
 
@@ -26,8 +38,10 @@ export async function POST(req: NextRequest) {
     if (!admin) return NextResponse.json({ error: "Admin access required" }, { status: 403 });
 
     try {
+        const cfg = await getHackathonConfig();
+        const schema = createSchemaForMode(cfg.mode === "TESTING");
         const body = await req.json();
-        const data = createSchema.parse(body);
+        const data = schema.parse(body);
 
         const ps = await prisma.problemStatement.create({
             data: {
@@ -42,7 +56,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, id: ps.id }, { status: 201 });
     } catch (err) {
         if (err instanceof z.ZodError) {
-            return NextResponse.json({ error: "Validation failed", details: err.issues }, { status: 400 });
+            return NextResponse.json(
+                {
+                    error: "Validation failed",
+                    details: err.issues,
+                    firstIssue: err.issues[0]?.message ?? "Invalid input",
+                },
+                { status: 400 }
+            );
         }
         console.error("Create PS error:", err);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

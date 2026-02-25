@@ -18,19 +18,26 @@ export async function POST(req: NextRequest) {
     }
 
     const user = session.user as any;
-    if (user.role !== "JUDGE" && user.role !== "ADMIN") {
-        return NextResponse.json({ error: "Only judges can submit scores" }, { status: 403 });
+    if (user.role !== "JUDGE" && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+        return NextResponse.json({ error: "Only judges/admins can submit scores" }, { status: 403 });
     }
 
     try {
         const body = await req.json();
         const data = scoreSchema.parse(body);
         const total = data.commitFrequency + data.codeQuality + data.problemRelevance + data.innovation;
+        const team = await prisma.team.findUnique({
+            where: { id: data.teamId },
+            select: { name: true },
+        });
+        if (!team) {
+            return NextResponse.json({ error: "Team not found" }, { status: 404 });
+        }
 
         const score = await prisma.score.upsert({
-            where: { teamId_judgeId: { teamId: data.teamId, judgeId: user.id } },
-            update: { ...data, total },
-            create: { ...data, judgeId: user.id, total },
+            where: { teamId: data.teamId },
+            update: { ...data, total, teamName: team.name },
+            create: { ...data, total, teamName: team.name },
         });
 
         return NextResponse.json({ success: true, score });
@@ -50,7 +57,7 @@ export async function GET(req: NextRequest) {
     }
 
     const user = session.user as any;
-    if (user.role !== "JUDGE" && user.role !== "ADMIN") {
+    if (user.role !== "JUDGE" && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -60,10 +67,30 @@ export async function GET(req: NextRequest) {
         where: teamId ? { teamId } : undefined,
         include: {
             team: { select: { name: true } },
-            judge: { select: { name: true } },
         },
         orderBy: { total: "desc" },
     });
 
     return NextResponse.json(scores);
+}
+
+export async function DELETE(req: NextRequest) {
+    const session = await auth();
+    if (!session?.user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = session.user as any;
+    if (user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
+    const body = await req.json().catch(() => null);
+    const teamId = body?.teamId;
+    if (typeof teamId !== "string" || !teamId.trim()) {
+        return NextResponse.json({ error: "teamId is required" }, { status: 400 });
+    }
+
+    await prisma.score.deleteMany({ where: { teamId: teamId.trim() } });
+    return NextResponse.json({ success: true });
 }

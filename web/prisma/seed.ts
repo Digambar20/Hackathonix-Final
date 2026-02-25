@@ -1,11 +1,15 @@
 import "dotenv/config";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import path from "path";
+import { Pool } from "pg";
 
-const dbPath = path.join(process.cwd(), "prisma", "dev.db");
-const adapter = new PrismaBetterSqlite3({ url: dbPath });
+const connectionString =
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@localhost:5432/hackathonix?schema=public";
+
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 const problemStatements = [
@@ -28,7 +32,7 @@ function makeId(title: string) {
 }
 
 async function main() {
-    console.log("🌱 Seeding database...");
+    console.log("Seeding database...");
 
     for (const ps of problemStatements) {
         await prisma.problemStatement.upsert({
@@ -37,7 +41,7 @@ async function main() {
             create: { id: makeId(ps.title), ...ps },
         });
     }
-    console.log(`✅ Seeded ${problemStatements.length} problem statements`);
+    console.log(`Seeded ${problemStatements.length} problem statements`);
 
     const hashedAdmin = await bcrypt.hash("admin123", 10);
     await prisma.user.upsert({
@@ -45,7 +49,7 @@ async function main() {
         update: {},
         create: { name: "Admin", email: "admin@hackthonix.in", password: hashedAdmin, role: "ADMIN" },
     });
-    console.log("✅ Created admin user (admin@hackthonix.in / admin123)");
+    console.log("Created admin user (admin@hackthonix.in / admin123)");
 
     const hashedJudge = await bcrypt.hash("judge123", 10);
     await prisma.user.upsert({
@@ -53,11 +57,14 @@ async function main() {
         update: {},
         create: { name: "Judge 1", email: "judge@hackthonix.in", password: hashedJudge, role: "JUDGE" },
     });
-    console.log("✅ Created judge user (judge@hackthonix.in / judge123)");
+    console.log("Created judge user (judge@hackthonix.in / judge123)");
 
-    console.log("🎉 Seeding complete!");
+    console.log("Seeding complete!");
 }
 
 main()
     .catch((e) => { console.error(e); process.exit(1); })
-    .finally(async () => { await prisma.$disconnect(); });
+    .finally(async () => {
+        await prisma.$disconnect();
+        await pool.end();
+    });

@@ -8,8 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { isAllowedAdminEmail } from "@/lib/admin-access";
+import { getSession, signIn } from "next-auth/react";
 
 export function LoginForm() {
     const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +56,16 @@ export function LoginForm() {
 
             if (result.ok) {
                 console.log("[Login] Login successful, redirecting to dashboard");
-                const targetPath = isAllowedAdminEmail(email) ? "/admin/dashboard" : "/dashboard";
+                const session = await getSession();
+                const role = (session?.user as any)?.role as string | undefined;
+
+                let targetPath = "/dashboard";
+                if (role === "ADMIN" || role === "SUPERADMIN") {
+                    targetPath = "/admin/dashboard";
+                } else if (role === "JUDGE") {
+                    targetPath = "/judge/dashboard";
+                }
+
                 router.push(targetPath);
                 router.refresh();
             } else {
@@ -134,6 +142,11 @@ export function LoginForm() {
                 <Link href="/register">
                     <Button variant="outline" className="w-full border-border hover:bg-muted text-muted-foreground hover:text-foreground" disabled={isLoading}>
                         Register New Team
+                    </Button>
+                </Link>
+                <Link href="/admin-login">
+                    <Button variant="outline" className="w-full border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:text-amber-200" disabled={isLoading}>
+                        Admin Access Portal
                     </Button>
                 </Link>
             </CardContent>
