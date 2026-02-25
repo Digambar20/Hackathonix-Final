@@ -1,0 +1,149 @@
+{
+    "project": {
+        "name": "Hackthonix 2.0",
+        "description": "High-performance platform for a 10-hour innovation sprint.",
+        "version": "1.0.0"
+    },
+    "techStack": {
+        "framework": "Next.js 14+ (App Router)",
+        "language": "TypeScript",
+        "styling": "Tailwind CSS",
+        "uiLibrary": "Shadcn UI",
+        "animation": {
+            "general": "GSAP (GreenSock)",
+            "scrolling": "Lenis",
+            "3d_webgl": "Three.js / React-Three-Fiber / Drei",
+            "transitions": "Framer Motion (Recommended over Barba.js for Next.js App Router compatibility)"
+        },
+        "backend": {
+            "runtime": "Node.js",
+            "database": "PostgreSQL",
+            "orm": "Prisma",
+            "auth": "NextAuth.js (v5)",
+            "cache": "Redis (Optional for live leaderboard)"
+        }
+    },
+    "designSystem": {
+        "philosophy": "Cyber-Obsidian",
+        "tone": "Urgent, High-Performance, Futuristic",
+        "typography": {
+            "provider": "Google Fonts",
+            "headings": {
+                "family": "Outfit",
+                "altFamily": "Syncopate (for hero/glitch text)",
+                "weights": [
+                    "700",
+                    "900"
+                ],
+                "style": "Uppercase, Wide Tracking"
+            },
+            "body": {
+                "family": "Inter",
+                "altFamily": "Space Grotesk (for data/numbers)",
+                "weights": [
+                    "400",
+                    "500",
+                    "600"
+                ],
+                "readability": "High contrast, generous line-height"
+            },
+            "code": {
+                "family": "JetBrains Mono",
+                "usage": "Terminal logs, snippets"
+            }
+        },
+        "colors": {
+            "background": {
+                "primary": "#050505 (Obsidian)",
+                "secondary": "#0a0a0a (Deep Carbon)",
+                "surface": "rgba(255, 255, 255, 0.03) (Glass)"
+            },
+            "accents": {
+                "primary": "#00f0ff (Cyber Cyan)",
+                "secondary": "#7000ff (Electric Purple)",
+                "success": "#00ff9d (Neon Green)",
+                "danger": "#ff0055 (Glitch Red)"
+            }
+        }
+    },
+    "databaseSchema": {
+        "User": {
+            "id": "String (UUID)",
+            "name": "String",
+            "email": "String (Unique)",
+            "role": "Enum (PARTICIPANT, JUDGE, ADMIN)",
+            "teamId": "String (FK)"
+        },
+        "Team": {
+            "id": "String (UUID)",
+            "name": "String (Unique)",
+            "repoUrl": "String",
+            "problemStatementId": "String (FK)",
+            "psLockedAt": "DateTime",
+            "members": "User[]"
+        },
+        "ProblemStatement": {
+            "id": "String (UUID)",
+            "title": "String",
+            "description": "String",
+            "category": "String",
+            "difficulty": "Enum (EASY, MEDIUM, HARD)"
+        },
+        "Score": {
+            "id": "String (UUID)",
+            "teamId": "String (FK)",
+            "judgeId": "String (FK)",
+            "criteria": {
+                "commitFrequency": "Int (0-25)",
+                "codeQuality": "Int (0-25)",
+                "problemRelevance": "Int (0-25)",
+                "innovation": "Int (0-25)"
+            },
+            "total": "Int"
+        }
+    },
+    "phases": [
+        {
+            "id": "p1_setup",
+            "name": "Phase 1: Foundation & Mechanics",
+            "tasks": [
+                "Initialize Next.js project with TypeScript & Tailwind",
+                "Setup Lenis for smooth scrolling",
+                "Configure GSAP and Framer Motion context",
+                "Set up Prisma with PostgreSQL connection",
+                "Implement Cyber-Obsidian theme (global.css)"
+            ]
+        },
+        {
+            "id": "p2_core_features",
+            "name": "Phase 2: Core Logic & Auth",
+            "tasks": [
+                "Implement NextAuth.js for Email/Team login",
+                "Create Team Dashboard Layout",
+                "Build Problem Statement Selection Logic (Timer + Locking)",
+                "Develop Judge Interface for scoring",
+                "Set up GitHub Context/API for repo tracking"
+            ]
+        },
+        {
+            "id": "p3_visuals_webgl",
+            "name": "Phase 3: Visuals & WebGL Experience",
+            "tasks": [
+                "Create Three.js Background (Particle Field / Cyber Grid)",
+                "Implement GSAP ScrollTrigger for landing page sections",
+                "Build Glassmorphism UI Components (Cards, Modals)",
+                "Add Page Transitions (Glitch / Fade effects)"
+            ]
+        },
+        {
+            "id": "p4_deployment",
+            "name": "Phase 4: Optimization & Launch",
+            "tasks": [
+                "Optimize 3D assets and bundles",
+                "Finalize Database functionality",
+                "Deploy to Vercel/Edge",
+                "Conduct Load Testing for 10-hour sprint traffic"
+            ]
+        }
+    ]
+}

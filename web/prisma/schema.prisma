@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String?
+  role      String   @default("PARTICIPANT") // PARTICIPANT, JUDGE, ADMIN
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id])
+  scores    Score[]  @relation("JudgeScores")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Team {
+  id                 String   @id @default(cuid())
+  name               String   @unique
+  collegeName        String
+  teamLeaderName     String
+  teamLeaderEmail    String   @unique
+  teamLeaderPhone    String
+  problemStatementId String?
+  problemStatement   ProblemStatement? @relation(fields: [problemStatementId], references: [id])
+  psStatus           String   @default("NONE") // NONE, PENDING, LOCKED
+  psSelectedAt       DateTime?
+  psLockedAt         DateTime?
+  repoUrl            String?
+  registrationApproved Boolean @default(false)
+  paymentVerified      Boolean @default(false)
+  members            User[]
+  scores             Score[]
+  notifications      Notification[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, SUCCESS, WARNING, ERROR
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ProblemStatement {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  category    String
+  difficulty  String   @default("MEDIUM") // EASY, MEDIUM, HARD
+  tags        String   @default("[]") // JSON array stored as string
+  teams       Team[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Score {
+  id              String @id @default(cuid())
+  teamId          String
+  team            Team   @relation(fields: [teamId], references: [id])
+  judgeId         String
+  judge           User   @relation("JudgeScores", fields: [judgeId], references: [id])
+  commitFrequency Int    @default(0)
+  codeQuality     Int    @default(0)
+  problemRelevance Int   @default(0)
+  innovation      Int    @default(0)
+  total           Int    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([teamId, judgeId])
+}
