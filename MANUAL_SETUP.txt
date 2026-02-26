@@ -7,7 +7,8 @@ If the automated setup script (setup.sh) fails, follow these manual steps:
    cd web
 
 2. Create your environment file:
-   cp .env.example .env
+   Windows (CMD): copy .env.example .env
+   Windows (PowerShell) / Linux / macOS: cp .env.example .env
 
 3. Configure your environment variables in web/.env:
    - DATABASE_URL: Your PostgreSQL connection string
@@ -26,6 +27,14 @@ If the automated setup script (setup.sh) fails, follow these manual steps:
 
 7. Start the development server:
    npm run dev
+
+PostgreSQL Configuration:
+------------------------
+- Host: localhost
+- Port: 5432
+- Database Name: hackathonix
+- Suggested SQL to create database:
+  CREATE DATABASE hackathonix;
 
 Troubleshooting:
 - Ensure Node.js 20+ and npm are installed.
