@@ -171,13 +171,7 @@ export default function DashboardPage() {
                             {isPayVerified ? (
                                 <p className="text-[10px] text-muted-foreground mt-1">Payment confirmed by admin</p>
                             ) : (
-                                <Button
-                                    size="sm"
-                                    className="mt-2 h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-bold gap-1"
-                                    onClick={() => window.open("https://pay.google.com", "_blank")}
-                                >
-                                    <CreditCard className="w-3 h-3" /> Pay Now
-                                </Button>
+                                <p className="text-[10px] text-yellow-500 mt-1">Awaiting verification</p>
                             )}
                         </CardContent>
                     </Card>

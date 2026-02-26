@@ -102,18 +102,35 @@ export async function updateHackathonConfig(input: {
   testingHomepageCountdownTargetAt?: string | Date;
 }) {
   const existing = await getHackathonConfig();
+  const now = new Date();
 
   const mode: HackathonMode = input.mode === "TESTING" ? "TESTING" : input.mode === "LIVE" ? "LIVE" : existing.mode;
+  
   // Problem/hackathon timers are editable only in TESTING mode.
-  const selectionStart = mode === "TESTING" && input.problemSelectionStartAt
-    ? toDate(input.problemSelectionStartAt)
-    : existing.problemSelectionStartAt;
-  const hackathonEnd = mode === "TESTING" && input.hackathonEndAt
-    ? toDate(input.hackathonEndAt)
-    : existing.hackathonEndAt;
-  const testingHomepageCountdownTargetAt = input.testingHomepageCountdownTargetAt
-    ? toDate(input.testingHomepageCountdownTargetAt)
-    : existing.testingHomepageCountdownTargetAt;
+  let selectionStart = existing.problemSelectionStartAt;
+  let hackathonEnd = existing.hackathonEndAt;
+  let testingHomepageCountdownTargetAt = existing.testingHomepageCountdownTargetAt;
+
+  if (mode === "TESTING") {
+    // If switching TO testing mode from LIVE, or if it's already testing but we want to reset to "standard" 30min test:
+    // We use the specified values if provided, otherwise default to the 30min/5min spec.
+    selectionStart = input.problemSelectionStartAt 
+      ? toDate(input.problemSelectionStartAt) 
+      : new Date(now.getTime() + 5 * 60 * 1000); // 5 mins from now
+      
+    hackathonEnd = input.hackathonEndAt 
+      ? toDate(input.hackathonEndAt) 
+      : new Date(now.getTime() + 30 * 60 * 1000); // 30 mins from now
+      
+    testingHomepageCountdownTargetAt = input.testingHomepageCountdownTargetAt
+      ? toDate(input.testingHomepageCountdownTargetAt)
+      : now; // Start now
+  } else {
+    // In LIVE mode, we might still want to update these, but usually they are fixed.
+    if (input.problemSelectionStartAt) selectionStart = toDate(input.problemSelectionStartAt);
+    if (input.hackathonEndAt) hackathonEnd = toDate(input.hackathonEndAt);
+    if (input.testingHomepageCountdownTargetAt) testingHomepageCountdownTargetAt = toDate(input.testingHomepageCountdownTargetAt);
+  }
 
   if (
     Number.isNaN(selectionStart.getTime())

@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { getHackathonConfig } from "@/lib/hackathon-config";
 
 export const COMMIT_COUNT_CAP = 5;
 export const COMMIT_SYNC_INTERVAL_HOURS = 2;
 const SYNC_INTERVAL_MS = COMMIT_SYNC_INTERVAL_HOURS * 60 * 60 * 1000;
+const TESTING_SYNC_INTERVAL_MS = 6 * 60 * 1000; // 6 minutes for testing
 
 function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
   try {
@@ -74,6 +76,11 @@ async function fetchLeaderCommitCount(owner: string, repo: string, leaderEmail: 
 }
 
 export async function syncTeamCommitValidation(teamId: string, force = false) {
+  const cfg = await getHackathonConfig();
+  const isTesting = cfg.mode === "TESTING";
+  const intervalMs = isTesting ? TESTING_SYNC_INTERVAL_MS : SYNC_INTERVAL_MS;
+  const windowHours = isTesting ? 0.1 : COMMIT_SYNC_INTERVAL_HOURS;
+
   const db: any = prisma;
   const team = await db.team.findUnique({
     where: { id: teamId },
@@ -90,7 +97,7 @@ export async function syncTeamCommitValidation(teamId: string, force = false) {
   if (!team.repoUrl) return { ok: false, reason: "NO_REPO" } as const;
 
   const now = new Date();
-  if (!force && team.lastCommitSyncAt && now.getTime() - team.lastCommitSyncAt.getTime() < SYNC_INTERVAL_MS) {
+  if (!force && team.lastCommitSyncAt && now.getTime() - team.lastCommitSyncAt.getTime() < intervalMs) {
     return { ok: true, skipped: true, reason: "SYNC_NOT_DUE" } as const;
   }
 
@@ -136,7 +143,7 @@ export async function syncTeamCommitValidation(teamId: string, force = false) {
         leaderEmail: team.teamLeaderEmail,
         leaderCommitCount,
         leaderCommitValidated,
-        windowHours: COMMIT_SYNC_INTERVAL_HOURS,
+        windowHours,
       },
     }),
   ]);
@@ -150,7 +157,7 @@ export async function syncTeamCommitValidation(teamId: string, force = false) {
       leaderCommitCount,
       leaderCommitValidated,
       cap: COMMIT_COUNT_CAP,
-      intervalHours: COMMIT_SYNC_INTERVAL_HOURS,
+      intervalHours: windowHours,
       syncedAt: now.toISOString(),
     },
   } as const;

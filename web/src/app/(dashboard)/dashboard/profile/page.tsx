@@ -89,16 +89,7 @@ export default function ProfilePage() {
                             {isPayVerified ? (
                                 <p className="text-xs text-muted-foreground mt-2">Payment has been confirmed by the admin.</p>
                             ) : (
-                                <div className="mt-3">
-                                    <p className="text-xs text-muted-foreground mb-2">Complete your payment to confirm your participation.</p>
-                                    <Button
-                                        size="sm"
-                                        className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold gap-1.5"
-                                        onClick={() => window.open("https://pay.google.com", "_blank")}
-                                    >
-                                        <CreditCard className="w-3.5 h-3.5" /> Pay Now <ExternalLink className="w-3 h-3" />
-                                    </Button>
-                                </div>
+                                <p className="text-xs text-yellow-500 mt-2">Payment is pending verification.</p>
                             )}
                         </CardContent>
                     </Card>

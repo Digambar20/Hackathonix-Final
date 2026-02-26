@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
 import { COMMIT_COUNT_CAP, COMMIT_SYNC_INTERVAL_HOURS, syncTeamCommitValidation } from "@/lib/commit-validation";
+import { getHackathonConfig } from "@/lib/hackathon-config";
 
 const repoSchema = z.object({
     repoUrl: z.string().url().refine((url) => url.includes("github.com"), {
@@ -156,22 +157,37 @@ export async function GET() {
     }
 
     try {
-        const team = await prisma.team.findUnique({
-            where: { id: user.teamId },
-            select: {
-                repoUrl: true,
-                createdAt: true,
-                updatedAt: true,
-                rawCommitCount: true,
-                countedCommitCount: true,
-                leaderCommitCount: true,
-                leaderCommitValidated: true,
-                lastCommitSyncAt: true,
-            },
-        });
+        const [team, config] = await Promise.all([
+            prisma.team.findUnique({
+                where: { id: user.teamId },
+                select: {
+                    id: true,
+                    repoUrl: true,
+                    createdAt: true,
+                    updatedAt: true,
+                    rawCommitCount: true,
+                    countedCommitCount: true,
+                    leaderCommitCount: true,
+                    leaderCommitValidated: true,
+                    lastCommitSyncAt: true,
+                },
+            }),
+            getHackathonConfig()
+        ]);
+
         if (!team || !team.repoUrl) {
             return NextResponse.json({ error: "No repository linked" }, { status: 404 });
         }
+
+        // Auto-sync in TESTING mode if due (6 mins)
+        if (config.mode === "TESTING") {
+            await syncTeamCommitValidation(team.id, false);
+        }
+
+        // Fetch again to get updated sync status
+        const updatedTeam = config.mode === "TESTING" 
+            ? await prisma.team.findUnique({ where: { id: team.id } }) 
+            : team;
 
         const parsed = parseGitHubUrl(team.repoUrl);
         if (!parsed) {
@@ -191,19 +207,19 @@ export async function GET() {
             openIssues: 0,
             defaultBranch: "main",
             createdAt: team.createdAt.toISOString(),
-            updatedAt: (team.lastCommitSyncAt ?? team.updatedAt).toISOString(),
-            totalCommits: team.rawCommitCount ?? 0,
+            updatedAt: ((updatedTeam as any).lastCommitSyncAt ?? team.updatedAt).toISOString(),
+            totalCommits: (updatedTeam as any).rawCommitCount ?? 0,
             recentCommits: [],
             offline: false,
             syncMode: "SCHEDULED",
             commitValidation: {
-                rawCommitCount: team.rawCommitCount ?? 0,
-                countedCommitCount: team.countedCommitCount ?? 0,
-                leaderCommitCount: team.leaderCommitCount ?? 0,
-                leaderCommitValidated: team.leaderCommitValidated ?? false,
+                rawCommitCount: (updatedTeam as any).rawCommitCount ?? 0,
+                countedCommitCount: (updatedTeam as any).countedCommitCount ?? 0,
+                leaderCommitCount: (updatedTeam as any).leaderCommitCount ?? 0,
+                leaderCommitValidated: (updatedTeam as any).leaderCommitValidated ?? false,
                 cap: COMMIT_COUNT_CAP,
-                intervalHours: COMMIT_SYNC_INTERVAL_HOURS,
-                syncedAt: team.lastCommitSyncAt?.toISOString?.() ?? null,
+                intervalHours: config.mode === "TESTING" ? 0.1 : COMMIT_SYNC_INTERVAL_HOURS,
+                syncedAt: (updatedTeam as any).lastCommitSyncAt?.toISOString?.() ?? null,
             },
         });
     } catch (err) {

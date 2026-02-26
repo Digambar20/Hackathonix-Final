@@ -12,6 +12,19 @@ export function Hero() {
     const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
     const [countdownTargetIso, setCountdownTargetIso] = useState("2026-03-09T03:30:00.000Z");
 
+    const formatToIST = (iso: string) => {
+        try {
+            const date = new Date(iso);
+            return date.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                dateStyle: 'medium',
+                timeStyle: 'short',
+            }) + " IST";
+        } catch {
+            return "March 9, 2026, 9:00 AM IST";
+        }
+    };
+
     useEffect(() => {
         fetch("/api/hackathon/config", { cache: "no-store" })
             .then((r) => (r.ok ? r.json() : null))
@@ -113,13 +126,16 @@ export function Hero() {
                     </div>
 
                     {/* Countdown Timer - Right */}
-                    <div className="flex justify-center lg:justify-start">
+                    <div className="flex flex-col items-center lg:items-start gap-4 justify-center">
                         <CountdownTimer
                             days={countdown.days}
                             hours={countdown.hours}
                             minutes={countdown.minutes}
                             seconds={countdown.seconds}
                         />
+                        <p className="text-[10px] font-mono text-muted-foreground/60 tracking-wider uppercase">
+                            UNTIL: {formatToIST(countdownTargetIso)}
+                        </p>
                     </div>
                 </motion.div>
 

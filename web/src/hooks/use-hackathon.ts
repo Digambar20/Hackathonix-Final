@@ -104,7 +104,7 @@ export function useHackathon() {
     // - Before start: countdown to Mar 9, 2026 9:30 AM
     // - During hackathon: countdown to Mar 9, 2026 7:30 PM
     // - After end: 00:00:00
-    const [timeLeft, setTimeLeft] = useState("10:00:00");
+    const [timeLeft, setTimeLeft] = useState("10:00:00 IST");
     const [timerPhase, setTimerPhase] = useState<"PRE_EVENT" | "HACKATHON" | "ENDED">("PRE_EVENT");
     const isTestingMode = eventConfig.mode === "TESTING";
 
@@ -148,7 +148,7 @@ export function useHackathon() {
                 targetTime = hackathonEnd;
             } else {
                 setTimerPhase("ENDED");
-                setTimeLeft("00:00:00");
+                setTimeLeft("00:00:00 IST");
                 clearInterval(timer);
                 return;
             }
@@ -156,7 +156,7 @@ export function useHackathon() {
             const diff = targetTime.getTime() - now.getTime();
 
             if (diff <= 0) {
-                setTimeLeft("00:00:00");
+                setTimeLeft("00:00:00 IST");
                 return;
             }
 
@@ -164,7 +164,7 @@ export function useHackathon() {
             const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
             const s = Math.floor((diff % (1000 * 60)) / 1000);
 
-            setTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+            setTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} IST`);
         }, 1000);
 
         return () => clearInterval(timer);
