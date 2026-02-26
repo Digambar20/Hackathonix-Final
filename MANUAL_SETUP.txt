@@ -1,0 +1,33 @@
+HACKATHONIX - MANUAL SETUP GUIDE
+================================
+
+If the automated setup script (setup.sh) fails, follow these manual steps:
+
+1. Navigate to the web directory:
+   cd web
+
+2. Create your environment file:
+   cp .env.example .env
+
+3. Configure your environment variables in web/.env:
+   - DATABASE_URL: Your PostgreSQL connection string
+   - NEXTAUTH_SECRET: A random secret for authentication
+   - GITHUB_TOKEN: GitHub Personal Access Token
+   - CRON_SECRET: Secret for sync endpoints
+
+4. Install dependencies:
+   npm install
+
+5. Generate Prisma Client:
+   npx prisma generate
+
+6. Run database migrations:
+   npx prisma migrate deploy
+
+7. Start the development server:
+   npm run dev
+
+Troubleshooting:
+- Ensure Node.js 20+ and npm are installed.
+- Ensure PostgreSQL is running before running migrations.
+- If migrations fail, check your DATABASE_URL in .env.
